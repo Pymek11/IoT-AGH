@@ -1,0 +1,15 @@
+# TLDR - Key specifications & Requirements
+- **Target frequency band:** 100 Hz - 2000 Hz (max 4000 Hz)
+- **ADC Sampling Rate:** 8.0 kHz – 11.025 kHz
+- **Microphone SNR:** > 60 – 65 dB
+- **Microphone Sensitivity:** -26 dBFS to -38 dBV
+- **Microphone Type:** Digital MEMS (I2S / PDM) or Analog MEMS
+- **Directivity:** Omnidirectional (wszechkierunkowy)
+- **Power Consumption:** < 1 mA (Active mode), < 10 µA (Sleep mode)
+- **Mounting Height:** 1.5 m – 2.5 m (above ground on tree trunks)
+- **Wind Protection:** Physical foam or deadcat windscreen
+- **Detection Distance:** 80 m – 150 m (up to 200 m along paths)
+- **Sensor Node Spacing:**
+  - Along forest trails/roads: 150 m – 200 m
+  - Dense forest grid coverage: 100 m – 150 m
+- **Power Management Strategy:** MCU in Deep Sleep + Hardware Wake-on-Sound / Threshold Interrupt trigger
