@@ -45,7 +45,7 @@ placed in one of those two folders (or the filter extended). `external_tools/` i
 | `BOARD_XIAO_ESP32S3` | `esp32-s3-devkitc-1` | Selects the pin set for the XIAO in `config.h` |
 | `SERIAL_BAUD` | both | Serial speed, taken from `common.serial_baud`; used as the default of `Logger` |
 | `ARDUINO_USB_CDC_ON_BOOT=1`, `ARDUINO_USB_MODE=1` | `esp32-s3-devkitc-1` | Route `Serial` through the native USB port |
-| `MIC_STREAM` | optional, commented out | Debug mode that streams raw samples over serial (see [main.md](main.md)) |
+| `MIC_STREAM` | unused | Audio is analyzed on the board and logged as text |
 
 `config.h` stops the build with an error if neither board define is set.
 
@@ -66,28 +66,7 @@ If `pio` is not found in the shell, it is installed at `~/.platformio/penv/bin/p
 Only one program can use a serial port at a time. Close the serial monitor before uploading or
 before running a capture script.
 
-## Normal mode and stream mode
+## Normal mode
 
-| | Normal mode | Stream mode (debug) |
-|---|---|---|
-| `serial_baud` | `115200` | `921600` |
-| `-DMIC_STREAM` | commented out | enabled |
-| Serial output | text logs | raw samples (no text) |
-| Tool | serial monitor | `external_tools/mic_tests/capture.py` |
-
-To switch, change both settings above, then build and upload again. Switch back for normal use.
-
-## Capturing the microphone on a PC (debug tool)
-
-`Source/external_tools/mic_tests/` has a Python script that records the stream and saves it as a
-24-bit mono `.wav` file:
-
-```
-cd Source/external_tools/mic_tests
-source .venv/bin/activate
-python capture.py --seconds 10 -o recordings/name.wav
-```
-
-Defaults match the firmware (12 000 Hz, 921600 baud). The virtual environment (`.venv/`) is not
-committed; create it with `python3 -m venv .venv` and `pip install -r requirements.txt`.
-See the known issue about glitches in [main.md](main.md).
+The normal `115200` serial monitor shows signed 24-bit readings, filtered RMS, FFT peak and
+classification. No WAV recording or serial streaming mode is needed for engine detection.

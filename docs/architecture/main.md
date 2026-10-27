@@ -65,29 +65,22 @@ size_t n = microphone.read( samples );
 - `microphone.read()` blocks until the block is full (~85 ms at 12 kHz), so there is no `delay()`
   in the loop. The block rate is set by the microphone.
 - If fewer than `MIC_BLOCK_SIZE` samples arrive, a warning is logged and the block is skipped.
-- A full block is handled in one of two ways, chosen at build time:
-  - **Normal mode:** min and max of the block are logged. This is a placeholder for the real
-    processing (filtering / engine detection).
-  - **`MIC_STREAM` mode:** the raw block is written to the serial port (see below).
+- A full block is handled in the normal on-board analysis path:
+  - **Normal mode:** each block is normalized from signed 24-bit samples, passed through a
+    20 Hz high-pass and 1200 Hz low-pass filter, and analyzed with a 1024-point FFT. The serial
+    log contains raw/filtered RMS, peak level, sample range, strongest frequency and classification.
 
 The whole loop has to finish within one block period (~85 ms), otherwise samples are lost between
 reads. If the processing becomes heavy, read and process in separate FreeRTOS tasks with a queue
 between them (the buffer would then move to file scope or into a class).
 
-## `MIC_STREAM` mode (debug only)
+## On-board audio analysis
 
-Enabled with the build flag `-DMIC_STREAM` (see [platformio.md](platformio.md)). It is meant for
-recording the microphone on a PC with `external_tools/mic_tests/capture.py`.
+The firmware does not require a `.wav` file. `Microphone::read()` supplies signed 24-bit values
+directly from the INMP441. Each block is converted to the `-1..1` range, filtered with cascaded
+biquad high-pass/low-pass filters, windowed with a Hamming window, and transformed using an
+in-place radix-2 FFT. The log reports raw bit-level diagnostics and prints `[ENGINE QUAD/MX]`
+when the filtered level and the 50–1200 Hz energy ratio meet the classification thresholds.
 
-- `setup()` calls `Logger::setEnabled( false )` first, so no text lines get mixed into the data.
-- After a successful setup it prints the line `MICSTREAM`. Boot messages come before it, so the
-  PC script uses it to find where the data starts.
-- `loop()` writes each block to serial as raw bytes: 4 bytes per sample, little-endian `int32_t`,
-  holding a signed 24-bit value.
-- Needs a higher serial speed: 12 000 samples/s × 4 bytes is about 480 kbit/s, so use
-  `serial_baud = 921600`.
-
-Known issue: recordings made this way contain occasional short bursts of zeros (16 or 32 samples,
-1–3 per 10 s). The data is correct in the board's memory right before sending (checked), so the
-zeros appear on the way to the PC. Changing the baud rate, the write size or the UART TX buffer
-did not help. The mode is not used for the actual product.
+Other audible blocks are reported as `[SOUND]`. The old PC stream/capture workflow is not part of
+the detection path.

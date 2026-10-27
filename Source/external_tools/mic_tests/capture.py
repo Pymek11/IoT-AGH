@@ -1,12 +1,13 @@
-"""Records raw microphone samples streamed by the ESP32 and saves them as a 24-bit mono .wav file.
+"""Records microphone samples streamed by the ESP32 and saves 24-bit mono WAV files.
 
-The firmware must be built with -DMIC_STREAM (see platformio.ini). It sends the line "MICSTREAM"
-and then 4 bytes per sample (little-endian int32, signed 24-bit value).
+With --dual, the firmware must be built with -DMIC_DUAL_STREAM. It sends the line
+"MICSTREAM", then one raw block followed by its filtered block.
 
 Close the PlatformIO serial monitor first, only one program can use the port.
 
 Example:
     python capture.py --seconds 10 -o engine.wav
+    python capture.py COM3 --dual --seconds 10 -o engine.wav
     python capture.py /dev/cu.usbserial-0001 --seconds 5
 """
 
@@ -16,6 +17,7 @@ import time
 import wave
 from array import array
 from datetime import datetime
+from pathlib import Path
 
 import serial
 from serial.tools import list_ports
@@ -27,6 +29,7 @@ WAV_BYTES_PER_SAMPLE = 3    # 24-bit in the file
 # Keep in sync with MIC_SAMPLE_RATE_HZ in modules/microphone/mic.h and serial_baud in platformio.ini
 DEFAULT_RATE_HZ = 12000
 DEFAULT_BAUD = 921600
+DUAL_BLOCK_SAMPLES = 1024
 
 
 def find_port():
@@ -76,6 +79,28 @@ def read_samples(ser, first_bytes, seconds, rate_hz):
     return bytes(data), time.monotonic() - start
 
 
+def read_dual_samples(ser, first_bytes, seconds, rate_hz):
+    """Reads block-paired raw and filtered samples from the serial stream."""
+    wanted_samples = int(seconds * rate_hz)
+    block_count = (wanted_samples + DUAL_BLOCK_SAMPLES - 1) // DUAL_BLOCK_SAMPLES
+    block_bytes = DUAL_BLOCK_SAMPLES * BYTES_PER_SAMPLE
+    wanted_bytes = block_count * block_bytes * 2
+    data = bytearray(first_bytes[:wanted_bytes])
+    start = time.monotonic()
+    while len(data) < wanted_bytes:
+        data += ser.read(min(max(ser.in_waiting, 1), wanted_bytes - len(data)))
+        print(f"\rRecording: {len(data) / wanted_bytes * 100:5.1f}%", end="", flush=True)
+    print()
+
+    raw = bytearray()
+    filtered = bytearray()
+    for offset in range(0, wanted_bytes, block_bytes * 2):
+        raw += data[offset:offset + block_bytes]
+        filtered += data[offset + block_bytes:offset + block_bytes * 2]
+    sample_bytes = wanted_samples * BYTES_PER_SAMPLE
+    return bytes(raw[:sample_bytes]), bytes(filtered[:sample_bytes]), time.monotonic() - start
+
+
 def save_wav(path, raw, rate_hz):
     """Converts int32 samples to packed 24-bit and writes them as a mono wav."""
     # Samples are sign extended, so the lowest 3 bytes of each one are the 24-bit value
@@ -83,7 +108,7 @@ def save_wav(path, raw, rate_hz):
     for byte in range(WAV_BYTES_PER_SAMPLE):
         packed[byte::WAV_BYTES_PER_SAMPLE] = raw[byte::BYTES_PER_SAMPLE]
 
-    with wave.open(path, "wb") as wav:
+    with wave.open(str(path), "wb") as wav:
         wav.setnchannels(1)
         wav.setsampwidth(WAV_BYTES_PER_SAMPLE)
         wav.setframerate(rate_hz)
@@ -101,6 +126,8 @@ def main():
     parser.add_argument("--no-reset", action="store_true",
                         help="do not reset the board, wait for the marker as is")
     parser.add_argument("--marker-timeout", type=float, default=10)
+    parser.add_argument("--dual", action="store_true",
+                        help="read raw and filtered blocks from MIC_DUAL_STREAM firmware")
     args = parser.parse_args()
 
     if sys.byteorder != "little":
@@ -117,7 +144,12 @@ def main():
 
         print("Waiting for the stream...")
         first_bytes = wait_for_marker(ser, args.marker_timeout)
-        raw, elapsed = read_samples(ser, first_bytes, args.seconds, args.rate)
+        if args.dual:
+            raw, filtered, elapsed = read_dual_samples(
+                ser, first_bytes, args.seconds, args.rate
+            )
+        else:
+            raw, elapsed = read_samples(ser, first_bytes, args.seconds, args.rate)
 
     raw = raw[:len(raw) // BYTES_PER_SAMPLE * BYTES_PER_SAMPLE]
     samples = array("i")
@@ -125,12 +157,26 @@ def main():
     if not samples:
         sys.exit("No samples received")
 
-    save_wav(output, raw, args.rate)
+    if args.dual:
+        output_path = Path(output)
+        raw_output = output_path.with_name(
+            output_path.stem + "_raw" + output_path.suffix
+        )
+        filtered_output = output_path.with_name(
+            output_path.stem + "_filtered" + output_path.suffix
+        )
+        save_wav(raw_output, raw, args.rate)
+        save_wav(filtered_output, filtered, args.rate)
+        print(f"Saved raw: {raw_output}")
+        print(f"Saved filtered: {filtered_output}")
+    else:
+        save_wav(output, raw, args.rate)
 
     # Time the data took to arrive should match the sample rate, a difference means lost samples
     # (or a rate different from the firmware's)
     actual_rate = len(samples) / elapsed if elapsed > 0 else 0
-    print(f"Saved {len(samples)} samples ({len(samples) / args.rate:.2f} s) to {output}")
+    if not args.dual:
+        print(f"Saved {len(samples)} samples ({len(samples) / args.rate:.2f} s) to {output}")
     print(f"Min {min(samples)}, max {max(samples)} (24-bit range is +-8388608)")
     if elapsed > 0.5 and abs(actual_rate - args.rate) > 0.05 * args.rate:
         print(f"WARNING: samples arrived at about {actual_rate:.0f} Hz, expected {args.rate} Hz. "
