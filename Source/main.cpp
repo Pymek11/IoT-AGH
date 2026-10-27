@@ -15,6 +15,10 @@ static void shutdown()
 }
 
 void setup() {
+#ifdef MIC_STREAM
+    // Serial carries raw samples, no text logs allowed
+    Logger::setEnabled( false );
+#endif
     logger.begin();
     logger.log( LogLevel::INFO, "Starting setup process" );
 
@@ -31,6 +35,14 @@ void setup() {
     {
         shutdown();
     }
+
+#ifdef MIC_STREAM
+    // Marks where the raw samples start, boot messages may come before it
+    else
+    {
+        Serial.print( "MICSTREAM\n" );
+    }
+#endif
 }
 
 void loop() {
@@ -45,6 +57,10 @@ void loop() {
         return;
     }
 
+#ifdef MIC_STREAM
+    // Raw samples, 4 bytes each (little endian int32_t, signed 24-bit values)
+    Serial.write( reinterpret_cast<const uint8_t *>( samples ), n * sizeof( int32_t ) );
+#else
     int32_t minValue = INT32_MAX;
     int32_t maxValue = INT32_MIN;
     for ( size_t i = 0; i < n; i++ )
@@ -55,4 +71,5 @@ void loop() {
 
     logger.log( LogLevel::INFO, "Block of %u samples, min %ld, max %ld",
                 (unsigned) n, (long) minValue, (long) maxValue );
+#endif
 }
