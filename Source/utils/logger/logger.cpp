@@ -3,8 +3,20 @@
 #include <cstdio>
 #include <cstdarg>
 
+bool Logger::_enabled = true;
+
 Logger::Logger( const char *tag, unsigned long baudRate )
     : _tag( tag ), _baudRate( baudRate ) {}
+
+void Logger::setEnabled( bool enabled )
+{
+    _enabled = enabled;
+}
+
+bool Logger::isEnabled()
+{
+    return _enabled;
+}
 
 void Logger::begin()
 {
@@ -30,6 +42,11 @@ const char *Logger::levelToString( LogLevel level )
 
 void Logger::log( LogLevel level, const char *format, ... )
 {
+    if ( !_enabled )
+    {
+        return;
+    }
+
     // Time from startup
     unsigned long current_time_ms = millis();
     unsigned long ms = current_time_ms % 1000;
