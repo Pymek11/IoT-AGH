@@ -15,11 +15,11 @@ constexpr float SAMPLE_RATE = static_cast<float>( MIC_SAMPLE_RATE_HZ );
 constexpr float MIN_ENGINE_HZ = 30.0f;
 constexpr float MAX_ENGINE_HZ = 220.0f;
 constexpr float ENGINE_LOW_HZ = 50.0f;
-constexpr float ENGINE_HIGH_HZ = 1200.0f;
+constexpr float ENGINE_HIGH_HZ = 1500.0f;
 constexpr float MIN_AUDIO_RMS = 0.0015f;
 constexpr float ENGINE_RMS = 0.0040f;
-constexpr float ENGINE_BAND_RATIO = 0.42f;
-constexpr float HIGH_PASS_CUTOFF_HZ = 200.0f;
+constexpr float ENGINE_BAND_RATIO = 0.55f;
+constexpr float HIGH_PASS_CUTOFF_HZ = 60.0f;
 constexpr float kTwoPi = 2.0f * kPi;
 
 BiquadFilter highPass;
