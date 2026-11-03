@@ -36,8 +36,8 @@ Build settings (boards, serial speed, build flags) live in `platformio.ini`.
 
 1. `Microphone::read()` fills a buffer with one block of samples (1024 samples, ~85 ms at 12 kHz).
    The samples are signed 24-bit values with the DC offset already removed.
-2. `loop()` in `main.cpp` receives the block. For now it only logs the block's min/max; this is the
-   place where the filtering / engine detection will be connected.
+2. `loop()` in `main.cpp` passes the block to `EngineDetector::process()`, which keeps track of
+   whether a vehicle engine is audible.
 3. All text goes to the serial port through `Logger`.
 
 ## Table of contents
@@ -45,6 +45,7 @@ Build settings (boards, serial speed, build flags) live in `platformio.ini`.
 | Document | What it describes |
 |---|---|
 | [main.md](main.md) | `main.cpp`: startup sequence, failure handling, shutdown, the main loop |
+| [detector.md](detector.md) | `EngineDetector`: features, thresholds and decision logic of the engine detection |
 | [microphone.md](microphone.md) | `Microphone` class: INMP441 wiring, I2S setup, sample format, DC offset removal |
 | [logger.md](logger.md) | `Logger` class: log format, levels, enabling / disabling, baud rate |
 | [platformio.md](platformio.md) | `platformio.ini`: environments, build flags, definitions, how to build and flash |
@@ -57,10 +58,16 @@ Source/
 ├── config.h                    pin definitions per board
 ├── platformio.ini              build configuration
 ├── modules/
-│   └── microphone/
-│       ├── mic.h               Microphone class + audio constants
-│       └── mic.cpp
+│   ├── microphone/
+│   │   ├── mic.h               Microphone class + audio constants
+│   │   ├── mic.cpp
+│   │   └── mic_stream.h/.cpp   MicStream: serial streaming debug mode
+│   └── detector/
+│       ├── detector.h          EngineDetector class + thresholds
+│       └── detector.cpp
 ├── utils/
+│   ├── fft/                    in-place radix-2 FFT
+│   ├── filter/                 biquad low-pass / high-pass
 │   └── logger/
 │       ├── logger.h            Logger class
 │       └── logger.cpp

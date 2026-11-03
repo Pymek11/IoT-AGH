@@ -45,7 +45,8 @@ placed in one of those two folders (or the filter extended). `external_tools/` i
 | `BOARD_XIAO_ESP32S3` | `esp32-s3-devkitc-1` | Selects the pin set for the XIAO in `config.h` |
 | `SERIAL_BAUD` | both | Serial speed, taken from `common.serial_baud`; used as the default of `Logger` |
 | `ARDUINO_USB_CDC_ON_BOOT=1`, `ARDUINO_USB_MODE=1` | `esp32-s3-devkitc-1` | Route `Serial` through the native USB port |
-| `MIC_STREAM` | unused | Audio is analyzed on the board and logged as text |
+| `MIC_STREAM` | unused | Streams filtered microphone blocks over serial instead of running the detector |
+| `MIC_DUAL_STREAM` | both (for now) | Streams raw + filtered blocks over serial instead of running the detector |
 
 `config.h` stops the build with an error if neither board define is set.
 
@@ -68,5 +69,7 @@ before running a capture script.
 
 ## Normal mode
 
-The normal `115200` serial monitor shows signed 24-bit readings, filtered RMS, FFT peak and
-classification. No WAV recording or serial streaming mode is needed for engine detection.
+Without `-DMIC_STREAM` / `-DMIC_DUAL_STREAM` in `build_flags` the firmware runs the engine
+detector and the serial monitor shows `[ENGINE]` state changes and the detector features once a
+second (see [detector.md](detector.md)). No WAV recording or serial streaming mode is needed for
+engine detection.

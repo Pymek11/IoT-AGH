@@ -10,9 +10,13 @@ File: `Source/main.cpp`
 ```cpp
 static Logger logger( "main" );
 static Microphone microphone;
+static EngineDetector detector;
+#ifdef MIC_STREAMING
+static MicStream micStream;     // only in the streaming debug modes
+#endif
 ```
 
-Both are file-level statics. Module objects are created here once and live for the whole run.
+All are file-level statics. Module objects are created here once and live for the whole run.
 
 ## `setup()`
 
@@ -33,7 +37,10 @@ Runs once after boot.
    ```
 
    Setup does not stop at the first failure, so one run reports every module that is broken.
-4. At the end, `if ( anyFailures ) shutdown();`.
+4. `detector.begin()` sets up the detector (it cannot fail).
+5. If anything failed, `shutdown()` is called and setup ends.
+6. In the streaming modes, `micStream.begin()` turns logging off and sends the `MICSTREAM`
+   marker, see [microphone.md](microphone.md#serial-streaming-micstream).
 
 ## `shutdown()`
 
@@ -66,9 +73,11 @@ size_t n = microphone.read( samples );
   in the loop. The block rate is set by the microphone.
 - If fewer than `MIC_BLOCK_SIZE` samples arrive, a warning is logged and the block is skipped.
 - A full block is handled in the normal on-board analysis path:
-  - **Normal mode:** each block is normalized from signed 24-bit samples, passed through a
-    20 Hz high-pass and 1200 Hz low-pass filter, and analyzed with a 1024-point FFT. The serial
-    log contains raw/filtered RMS, peak level, sample range, strongest frequency and classification.
+  - **Normal mode:** each block goes to `detectEngine()`, which calls `EngineDetector::process()`. `[ENGINE] Vehicle detected`
+    and `[ENGINE] Vehicle gone` are logged at `INFO` when the state changes, and the detector
+    features every 12 blocks (~1 s) at `DEBUG`. See [detector.md](detector.md).
+  - **`MIC_STREAM` / `MIC_DUAL_STREAM`:** the block goes to `micStream.send()`, which writes it to
+    the serial port as binary for `capture.py`.
 
 The whole loop has to finish within one block period (~85 ms), otherwise samples are lost between
 reads. If the processing becomes heavy, read and process in separate FreeRTOS tasks with a queue
@@ -77,10 +86,8 @@ between them (the buffer would then move to file scope or into a class).
 ## On-board audio analysis
 
 The firmware does not require a `.wav` file. `Microphone::read()` supplies signed 24-bit values
-directly from the INMP441. Each block is converted to the `-1..1` range, filtered with cascaded
-biquad high-pass/low-pass filters, windowed with a Hamming window, and transformed using an
-in-place radix-2 FFT. The log reports raw bit-level diagnostics and prints `[ENGINE QUAD/MX]`
-when the filtered level and the 50–1200 Hz energy ratio meet the classification thresholds.
-
-Other audible blocks are reported as `[SOUND]`. The old PC stream/capture workflow is not part of
-the detection path.
+directly from the INMP441 and `EngineDetector` (`modules/detector`) analyzes them on the board:
+low band level against an adaptive noise floor, periodicity from an autocorrelation, spectral
+flatness and band shares from an FFT, and a decision over the last ~2 s. Details and thresholds
+are in [detector.md](detector.md). The PC stream/capture workflow is not part of the detection
+path.
