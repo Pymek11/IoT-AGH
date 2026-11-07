@@ -13,8 +13,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-HIGH_PASS_HZ = 200.0
-LOW_PASS_HZ = 1200.0
+# Keep in sync with STREAM_HIGH_PASS_HZ / STREAM_LOW_PASS_HZ in main.cpp
+HIGH_PASS_HZ = 35.0
+LOW_PASS_HZ = 1500.0
 
 
 def read_wav(path):

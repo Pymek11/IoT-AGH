@@ -124,6 +124,21 @@ void loop()
 }
 ```
 
+## Serial streaming (`MicStream`)
+
+Files: `Source/modules/microphone/mic_stream.h`, `Source/modules/microphone/mic_stream.cpp`
+
+A debug mode for recording the microphone on a PC with `external_tools/mic_tests/capture.py`.
+It is compiled in when `-DMIC_STREAM` or `-DMIC_DUAL_STREAM` is in `build_flags` (both define
+`MIC_STREAMING`), and then replaces the engine detector in `loop()`.
+
+- `begin()` turns logging off (`Logger::setEnabled( false )`) and prints `MICSTREAM\n`. After the
+  marker the serial port carries only samples.
+- `send( samples )` filters a copy of the block (35 Hz high-pass, 1500 Hz low-pass, the same
+  high-pass as the detector) and writes little-endian `int32_t` samples:
+  - `MIC_STREAM`: the filtered block
+  - `MIC_DUAL_STREAM`: the raw block, then the filtered block
+
 ## Logging
 
 Uses a `Logger` with the tag `mic`. It logs the start (`I2S started: …`), the stop, and driver

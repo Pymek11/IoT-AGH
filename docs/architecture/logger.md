@@ -70,8 +70,9 @@ FreeRTOS tasks at once, so lines from different tasks can interleave.
 Static, so one call affects every `Logger` instance. While logging is disabled, `log()` returns
 immediately, before anything is formatted. Logging is enabled by default.
 
-It can be disabled by callers that need an exclusive serial data channel. The microphone analysis
-path keeps it enabled so diagnostic and detection messages are visible (see [main.md](main.md)).
+It can be disabled by callers that need an exclusive serial data channel: `MicStream::begin()`
+does this in the streaming modes (see [microphone.md](microphone.md)). In normal mode logging
+stays enabled so detection messages are visible.
 
 ## Baud rate
 
