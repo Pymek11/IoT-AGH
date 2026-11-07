@@ -4,6 +4,14 @@
 #include "modules/microphone/mic.h"
 #include "modules/microphone/mic_stream.h"
 #include "modules/detector/detector.h"
+#include "modules/recorder/recorder.h"
+
+#if defined( MIC_REC ) || defined( VIB_DIAG )
+#define RECORDER_MODE
+#if defined( MIC_STREAMING ) || ( defined( MIC_REC ) && defined( VIB_DIAG ) )
+#error "Pick one mode: MIC_REC, VIB_DIAG, MIC_STREAM or MIC_DUAL_STREAM"
+#endif
+#endif
 
 static_assert( DETECTOR_SAMPLE_RATE_HZ == MIC_SAMPLE_RATE_HZ, "detector and microphone sample rates differ" );
 static_assert( DETECTOR_BLOCK_SIZE == MIC_BLOCK_SIZE, "detector and microphone block sizes differ" );
@@ -69,6 +77,11 @@ static void shutdown()
 
 void setup()
 {
+#ifdef RECORDER_MODE
+    recorderSetup();
+    return;
+#endif
+
     logger.begin();
     logger.log( LogLevel::INFO, "Starting setup process" );
 
@@ -90,6 +103,11 @@ void setup()
 
 void loop()
 {
+#ifdef RECORDER_MODE
+    recorderLoop();
+    return;
+#endif
+
     static int32_t samples[MIC_BLOCK_SIZE];
 
     if ( !microphone.isRunning() )
