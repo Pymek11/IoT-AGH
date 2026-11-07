@@ -1,9 +1,13 @@
 """Records microphone audio and 801S vibration events from the MIC_REC firmware.
 
-Sends START to the board, saves everything until Ctrl+C (or --seconds), then sends STOP.
+Sends START to the board and STOP on Ctrl+C (or after --seconds).
+Continuous firmware: START begins the recording, STOP ends it.
+Triggered firmware: START arms the board, every vibration-triggered recording is saved as it ends
+(the session goes on until Ctrl+C), STOP disarms it.
 Every recording gives three files in --out:
     rec_YYYYMMDD_HHMMSS.wav          16-bit mono PCM
     rec_YYYYMMDD_HHMMSS.csv          801S changes: sample_index, t_s, state, note
+                                     (note "trigger" marks the edge that started the recording)
     rec_YYYYMMDD_HHMMSS_blocks.csv   801S level and audio level for every audio block
 
 Close the PlatformIO serial monitor first, only one program can use the port.
@@ -175,7 +179,8 @@ def main():
     parser.add_argument("port", nargs="?", help="serial port, found automatically if only one exists")
     parser.add_argument("-b", "--baud", type=int, default=DEFAULT_BAUD)
     parser.add_argument("-s", "--seconds", type=float, default=0,
-                        help="stop after this many seconds (0 = until Ctrl+C)")
+                        help="stop after this many seconds: of audio (continuous) or of the whole "
+                             "session (triggered); 0 = until Ctrl+C")
     parser.add_argument("-o", "--out", default=".", help="output folder")
     parser.add_argument("--no-start", action="store_true",
                         help="do not send START/STOP, only save what the board sends")
@@ -190,6 +195,8 @@ def main():
     pending_text = ""
     last_start_sent = 0.0
     status_time = 0.0
+    acknowledged = False        # the board answered START (START or ARMED frame)
+    session_start = time.monotonic()
 
     with serial.Serial(port, args.baud, timeout=0.05) as ser:
         print(f"Port {port} at {args.baud} baud, Ctrl+C to stop")
@@ -212,7 +219,15 @@ def main():
                     pending_text = print_text(text, pending_text)
 
                 for message in messages:
+                    if isinstance(message, rp.Armed):
+                        acknowledged = acknowledged or bool(message.armed)
+                        if message.armed:
+                            print("Board armed, waiting for vibration (Ctrl+C to stop)")
+                        else:
+                            print("Board disarmed")
+                        continue
                     if isinstance(message, rp.Start):
+                        acknowledged = True
                         if recording:
                             recording.finish(None)
                         recording = Recording(message, out_dir)
@@ -227,6 +242,8 @@ def main():
                     elif isinstance(message, rp.Stop):
                         recording.finish(message)
                         recording = None
+                        if acknowledged and not args.no_start:
+                            print("Waiting for the next recording (Ctrl+C to stop)")
 
                 if recording and now - status_time > 0.5:
                     status_time = now
@@ -235,12 +252,17 @@ def main():
                           end="", flush=True)
 
                 # The board may have been rebooting when START was sent
-                if not args.no_start and recording is None and now - last_start_sent > START_RETRY_S:
+                if not args.no_start and not acknowledged and now - last_start_sent > START_RETRY_S:
                     send("START")
                     last_start_sent = now
 
-                if args.seconds and recording and recording.written >= args.seconds * recording.rate:
-                    raise KeyboardInterrupt
+                if args.seconds:
+                    if recording and recording.start.mode == rp.MODE_CONTINUOUS:
+                        done = recording.written >= args.seconds * recording.rate
+                    else:
+                        done = now - session_start >= args.seconds
+                    if done:
+                        raise KeyboardInterrupt
         except KeyboardInterrupt:
             if not args.no_start:
                 send("STOP")

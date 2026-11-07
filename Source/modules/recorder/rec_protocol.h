@@ -22,6 +22,9 @@ enum class RecFrame : uint8_t
     START = 0x10,
     // u32 total_samples, u32 dropped_vib_events
     STOP = 0x11,
+    // u8 armed (1 = waiting for vibration, 0 = disarmed), u8 mode - answer to START / STOP in the
+    // triggered mode, where a recording starts later, on vibration
+    ARMED = 0x12,
     // u32 first_sample_index, u8 vib_level (at the end of the block), u8 flags (bit0: vibration seen
     // in the block), u16 peak_abs, u16 clipped_count, int16 samples[]
     AUDIO = 0x20,
@@ -43,6 +46,7 @@ public:
     static void sendStart( uint32_t sampleRate, uint8_t bits, uint16_t blockSize, uint8_t vibLevel,
                            uint8_t mode, uint32_t preTriggerSamples );
     static void sendStop( uint32_t totalSamples, uint32_t droppedVibEvents );
+    static void sendArmed( bool armed, uint8_t mode );
     static void sendAudio( uint32_t firstSample, uint8_t vibLevel, uint8_t flags, uint16_t peak,
                            uint16_t clipped, const int16_t *samples, size_t count );
     static void sendVib( uint32_t sampleIndex, uint8_t level, uint8_t flags );

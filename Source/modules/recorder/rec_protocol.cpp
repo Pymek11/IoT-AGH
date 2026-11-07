@@ -99,6 +99,12 @@ void RecProtocol::sendStop( uint32_t totalSamples, uint32_t droppedVibEvents )
     sendFrame( RecFrame::STOP, payload, p - payload );
 }
 
+void RecProtocol::sendArmed( bool armed, uint8_t mode )
+{
+    const uint8_t payload[2] = { static_cast<uint8_t>( armed ? 1 : 0 ), mode };
+    sendFrame( RecFrame::ARMED, payload, sizeof( payload ) );
+}
+
 void RecProtocol::sendAudio( uint32_t firstSample, uint8_t vibLevel, uint8_t flags, uint16_t peak,
                              uint16_t clipped, const int16_t *samples, size_t count )
 {

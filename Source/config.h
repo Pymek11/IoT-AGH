@@ -54,4 +54,31 @@
 // Lower it (7, 6, ...) to add 6 dB of gain per step if the recording is too quiet
 #define REC_PCM_SHIFT 8
 
+// =====================================
+// Triggered recording (MIC_REC on this branch): the 801S starts and extends each recording
+// =====================================
+
+// 0 = I2S runs all the time into a pre-trigger buffer, the start of a pass is kept (default)
+// 1 = I2S is started only on a trigger: less current, but the first ~0.1-0.2 s after it are lost
+//     (microphone start-up) and there is no audio from before the trigger
+#ifndef TRIG_I2S_ON_DEMAND
+#define TRIG_I2S_ON_DEMAND 0
+#endif
+
+// Spike filter: a recording starts after TRIG_PULSES vibration pulses within TRIG_WINDOW_MS
+// (a pulse = the 801S going to its active level). 1 = start on the first pulse
+#define TRIG_PULSES 3
+#define TRIG_WINDOW_MS 500
+
+// The recording ends after this long without vibration. Every pulse, and the pin staying at the
+// active level, extends it
+#define TRIG_HOLD_MS 5000
+
+// Audio kept from before the trigger (pre-trigger buffer, only with TRIG_I2S_ON_DEMAND 0)
+// Rounded up to whole audio blocks (1024 samples, ~85 ms at 12 kHz)
+#define TRIG_PRE_MS 1000
+
+// 1 = armed (waiting for vibration) right after boot, 0 = only after "START" from rec_capture.py
+#define TRIG_ARMED_AT_BOOT 0
+
 #endif

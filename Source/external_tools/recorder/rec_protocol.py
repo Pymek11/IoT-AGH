@@ -15,6 +15,7 @@ MAX_PAYLOAD = 8192  # anything longer is a false sync
 
 T_START = 0x10
 T_STOP = 0x11
+T_ARMED = 0x12
 T_AUDIO = 0x20
 T_VIB = 0x30
 
@@ -64,6 +65,12 @@ class Stop:
 
 
 @dataclass
+class Armed:
+    armed: int
+    mode: int
+
+
+@dataclass
 class Audio:
     first_sample: int
     vib_level: int
@@ -86,6 +93,8 @@ def decode(frame_type, payload):
         return Start(*struct.unpack("<IBHBBBI", payload[:14]))
     if frame_type == T_STOP:
         return Stop(*struct.unpack("<II", payload[:8]))
+    if frame_type == T_ARMED:
+        return Armed(*struct.unpack("<BB", payload[:2]))
     if frame_type == T_AUDIO:
         first, level, flags, peak, clipped = struct.unpack("<IBBHH", payload[:10])
         return Audio(first, level, flags, peak, clipped, bytes(payload[10:]))
