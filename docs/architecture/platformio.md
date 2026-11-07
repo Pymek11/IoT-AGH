@@ -16,13 +16,19 @@ The sources are in the project folder itself (`Source/`), not in a `src/` folder
 
 ```ini
 [common]
-serial_baud = 115200 ; for normal modes
-; serial_baud = 921600 ; when recording raw data thru serial
+serial_baud = 115200 ; for normal mode
+; serial_baud = 921600 ; when recording raw data thru serial (MIC_STREAM / MIC_DUAL_STREAM)
+mode_flags =
 ```
 
-Values shared by all environments. `serial_baud` is the single place where the serial speed is
-set; it is used for the serial monitor (`monitor_speed`) and for the code (`SERIAL_BAUD`). Keep
-only one `serial_baud` line active.
+Values shared by all environments.
+
+- `serial_baud` is the single place where the serial speed is set. It is used for the serial
+  monitor (`monitor_speed`) and for the code (`SERIAL_BAUD`). Keep only one `serial_baud` line
+  active.
+- `mode_flags` picks the firmware mode for both boards and is added to each environment's
+  `build_flags`. Empty means engine detection. It can hold `-DDETECTOR_DEBUG`, `-DMIC_STREAM` or
+  `-DMIC_DUAL_STREAM`, see the table below. The streaming modes need `serial_baud = 921600`.
 
 ## Environments
 
@@ -45,8 +51,9 @@ placed in one of those two folders (or the filter extended). `external_tools/` i
 | `BOARD_XIAO_ESP32S3` | `esp32-s3-devkitc-1` | Selects the pin set for the XIAO in `config.h` |
 | `SERIAL_BAUD` | both | Serial speed, taken from `common.serial_baud`; used as the default of `Logger` |
 | `ARDUINO_USB_CDC_ON_BOOT=1`, `ARDUINO_USB_MODE=1` | `esp32-s3-devkitc-1` | Route `Serial` through the native USB port |
-| `MIC_STREAM` | unused | Streams filtered microphone blocks over serial instead of running the detector |
-| `MIC_DUAL_STREAM` | both (for now) | Streams raw + filtered blocks over serial instead of running the detector |
+| `DETECTOR_DEBUG` | `mode_flags`, off | Also logs the detector features once a second, for tuning |
+| `MIC_STREAM` | `mode_flags`, off | Streams filtered microphone blocks over serial instead of running the detector |
+| `MIC_DUAL_STREAM` | `mode_flags`, off | Streams raw + filtered blocks over serial instead of running the detector |
 
 `config.h` stops the build with an error if neither board define is set.
 
@@ -69,7 +76,7 @@ before running a capture script.
 
 ## Normal mode
 
-Without `-DMIC_STREAM` / `-DMIC_DUAL_STREAM` in `build_flags` the firmware runs the engine
-detector and the serial monitor shows `[ENGINE]` state changes and the detector features once a
-second (see [detector.md](detector.md)). No WAV recording or serial streaming mode is needed for
+With an empty `mode_flags` the firmware runs the engine detector and the serial monitor shows
+`Vehicle detected` for every block while a vehicle is heard. Add `-DDETECTOR_DEBUG` to see the
+detector features once a second as well (see [detector.md](detector.md)). No WAV recording or serial streaming mode is needed for
 engine detection.

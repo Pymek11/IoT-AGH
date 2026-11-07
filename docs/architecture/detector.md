@@ -75,8 +75,8 @@ detector.reset();                         // e.g. after the microphone was stopp
 
 ## Tuning
 
-All thresholds are `constexpr` in `detector.h`. `main.cpp` logs the features every 12 blocks
-(~1 s) at `DEBUG` level:
+All thresholds are `constexpr` in `detector.h`. Built with `-DDETECTOR_DEBUG` (in `mode_flags` in
+`platformio.ini`), `main.cpp` logs the features every 12 blocks (~1 s) at `DEBUG` level:
 
 ```
 level=-62.3 floor=-78.0 snr=15.7 per=0.71 pitch=55 flat=0.04 low=0.93 high=0.01 E DETECTED

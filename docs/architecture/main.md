@@ -24,23 +24,23 @@ Runs once after boot.
 
 1. `logger.begin()` opens the serial port (the speed is `SERIAL_BAUD`, see
    [platformio.md](platformio.md)).
-2. A flag `bool anyFailures = false;` tracks whether any module failed to start.
-3. Each module is started in turn. If `begin()` returns `false`, the error is logged and
-   `anyFailures` is set to `true`:
+2. `detector.begin()` sets up the detector (it cannot fail).
+3. A flag `bool anyFailures = false;` tracks whether any module failed to start.
+4. Each module is started in turn. If it fails, the error is logged and `anyFailures` is set to
+   `true`. The microphone is started by `startMicrophone()`:
 
    ```cpp
-   if ( !microphone.begin() )
+   if ( !startMicrophone() )
    {
-       logger.log( LogLevel::ERR, "Microphone setup failed" );
        anyFailures = true;
    }
    ```
 
+   `startMicrophone()` calls `microphone.begin()` and, in the streaming modes, `micStream.begin()`,
+   which turns logging off and sends the `MICSTREAM` marker
+   (see [microphone.md](microphone.md#serial-streaming-micstream)).
    Setup does not stop at the first failure, so one run reports every module that is broken.
-4. `detector.begin()` sets up the detector (it cannot fail).
-5. If anything failed, `shutdown()` is called and setup ends.
-6. In the streaming modes, `micStream.begin()` turns logging off and sends the `MICSTREAM`
-   marker, see [microphone.md](microphone.md#serial-streaming-micstream).
+5. If anything failed, `shutdown()` is called. `loop()` then retries the microphone.
 
 ## `shutdown()`
 
@@ -51,9 +51,8 @@ static void shutdown()
 Graceful shutdown of every module. It logs a warning and calls `end()` on each module. Today that
 is only `microphone.end()`.
 
-It stops the modules but does **not** halt the board: after a failed setup `loop()` still runs.
-If the board should stop, add a `while ( true ) delay( 1000 );` or deep sleep at the end of the
-`if ( anyFailures )` block.
+It stops the modules but does **not** halt the board: after a failed setup `loop()` still runs
+and tries to start the microphone again.
 
 To add a module: start it in `setup()` (and set `anyFailures` on error), then call its `end()`
 in `shutdown()`.
@@ -65,7 +64,17 @@ Runs forever after `setup()`.
 ```cpp
 static int32_t samples[MIC_BLOCK_SIZE];
 size_t n = microphone.read( samples );
+...
+bool detected = detector.process( samples );
+if ( detected )
+{
+    logger.log( LogLevel::INFO, "Vehicle detected" );
+}
 ```
+
+- If the microphone is not running (it failed to start), the loop waits `MIC_RETRY_DELAY_MS`
+  (5 s) and calls `startMicrophone()` again. After a successful restart `detector.reset()` clears
+  the detector's history, since the old samples no longer follow on.
 
 - `samples` is `static`, so the 4 KB buffer is in static memory and not on the stack. It costs
   nothing extra per call.
@@ -73,9 +82,10 @@ size_t n = microphone.read( samples );
   in the loop. The block rate is set by the microphone.
 - If fewer than `MIC_BLOCK_SIZE` samples arrive, a warning is logged and the block is skipped.
 - A full block is handled in the normal on-board analysis path:
-  - **Normal mode:** each block goes to `detectEngine()`, which calls `EngineDetector::process()`. `[ENGINE] Vehicle detected`
-    and `[ENGINE] Vehicle gone` are logged at `INFO` when the state changes, and the detector
-    features every 12 blocks (~1 s) at `DEBUG`. See [detector.md](detector.md).
+  - **Normal mode:** each block goes to `EngineDetector::process()`. The sound is analyzed
+    continuously, block after block. While a vehicle is detected, `Vehicle detected` is logged at
+    `INFO` for every block (~12 lines per second). With `-DDETECTOR_DEBUG`, `logFeatures()` also
+    logs the detector features every 12 blocks (~1 s) at `DEBUG`. See [detector.md](detector.md).
   - **`MIC_STREAM` / `MIC_DUAL_STREAM`:** the block goes to `micStream.send()`, which writes it to
     the serial port as binary for `capture.py`.
 
