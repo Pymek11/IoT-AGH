@@ -11,7 +11,9 @@ Wersja z ciągłym nagrywaniem jest na gałęzi `feat/mic-continuous-vib`.
 ### Jak działa wyzwalanie
 
 - **Filtr szpilek:** nagranie startuje dopiero po `TRIG_PULSES` impulsach (przejściach 801S do stanu
-  aktywnego) w oknie `TRIG_WINDOW_MS`. Domyślnie są to 3 impulsy w 500 ms. Wartość 1 oznacza start od pierwszego impulsu.
+  aktywnego) w oknie `TRIG_WINDOW_MS`. Wartość 1 oznacza start od pierwszego impulsu.
+  Do testów jest teraz włączone `TRIG_ON_LEVEL 1`: po uzbrojeniu nagranie startuje przy pierwszym
+  stanie HIGH 801S. Docelowo ustaw `TRIG_ON_LEVEL 0` i np. `TRIG_PULSES 3`.
 - **Pre-trigger (domyślnie):** I2S działa cały czas i zapisuje ostatnie `TRIG_PRE_MS` (1 s, zaokrąglone do
   bloków, czyli 1,02 s) do bufora kołowego. Po wyzwoleniu ten bufor jest wysyłany jako początek nagrania,
   więc początek przejazdu nie jest ucinany.
@@ -49,7 +51,8 @@ Wszystkie parametry są w `Source/config.h`:
 | `VIB_DEBOUNCE_US` | 2000 | zbocza bliżej niż 2 ms od poprzedniego są pomijane |
 | `VIB_LED_PIN` / `VIB_LED_HOLD_MS` | 2 / 100 | dioda drgań |
 | `REC_PCM_SHIFT` | 8 | wzmocnienie przy konwersji 24 → 16 bit (o 1 mniej = +6 dB) |
-| `TRIG_PULSES` / `TRIG_WINDOW_MS` | 3 / 500 | filtr szpilek (N impulsów w T ms) |
+| `TRIG_PULSES` / `TRIG_WINDOW_MS` | 1 / 500 | filtr szpilek (N impulsów w T ms), docelowo np. 3 / 500 |
+| `TRIG_ON_LEVEL` | 1 (test) | 1 = sam stan HIGH po uzbrojeniu startuje nagranie, bez filtra szpilek |
 | `TRIG_HOLD_MS` | 5000 | koniec nagrania po tylu ms bez drgań (X) |
 | `TRIG_PRE_MS` | 1000 | długość pre-bufora |
 | `TRIG_I2S_ON_DEMAND` | 0 | 1 = I2S włączany dopiero na trigger |

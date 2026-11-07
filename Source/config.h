@@ -67,8 +67,12 @@
 
 // Spike filter: a recording starts after TRIG_PULSES vibration pulses within TRIG_WINDOW_MS
 // (a pulse = the 801S going to its active level). 1 = start on the first pulse
-#define TRIG_PULSES 3
+#define TRIG_PULSES 1
 #define TRIG_WINDOW_MS 500
+
+// 1 = when armed, the pin simply being at the active level starts a recording (no edge needed,
+// the spike filter is skipped). For testing; 0 = only the pulse filter above starts it
+#define TRIG_ON_LEVEL 1
 
 // The recording ends after this long without vibration. Every pulse, and the pin staying at the
 // active level, extends it

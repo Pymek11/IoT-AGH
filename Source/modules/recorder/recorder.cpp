@@ -351,8 +351,9 @@ void recorderSetup()
     Serial.setTxBufferSize( SERIAL_TX_BUFFER );   // must come before Serial.begin()
     logger.begin();
     logger.log( LogLevel::INFO,
-                "MIC_REC triggered: %lu Hz, 16-bit, 801S on GPIO%d, %d pulses / %d ms, hold %d ms, %s",
-                (unsigned long) MIC_SAMPLE_RATE_HZ, VIB_PIN, TRIG_PULSES, TRIG_WINDOW_MS, TRIG_HOLD_MS,
+                "MIC_REC triggered: %lu Hz, 16-bit, 801S on GPIO%d, %d pulses / %d ms%s, hold %d ms, %s",
+                (unsigned long) MIC_SAMPLE_RATE_HZ, VIB_PIN, TRIG_PULSES, TRIG_WINDOW_MS,
+                TRIG_ON_LEVEL ? " or active level" : "", TRIG_HOLD_MS,
                 TRIG_I2S_ON_DEMAND ? "I2S on demand (no pre-trigger)" : "pre-trigger buffer" );
     if ( PRE_BLOCKS > 0 )
     {
@@ -436,9 +437,18 @@ void recorderLoop()
     }
 
     const int64_t now = esp_timer_get_time();
-    if ( VibrationSensor::isActive( vib.level() ) )
+    const bool levelActive = VibrationSensor::isActive( vib.level() );
+    if ( levelActive )
     {
         lastActivityUs = now;   // the pin held at the active level keeps the recording going
+    }
+
+    // Test mode: the active level alone starts a recording, without the spike filter
+    bool levelTrigger = false;
+    if ( TRIG_ON_LEVEL && state == State::ARMED && !triggerNow && levelActive )
+    {
+        triggerNow = true;
+        levelTrigger = true;
     }
 
     // 3. Audio block: send it, or keep it in the pre-trigger buffer
@@ -461,6 +471,13 @@ void recorderLoop()
     if ( triggerNow )
     {
         startRecording();
+        if ( levelTrigger )
+        {
+            // No edge carried the trigger flag: mark the moment in the CSV with a polled event
+            const uint32_t index = microphone.isRunning() ? sampleClock.indexAt( now ) : 0;
+            RecProtocol::sendVib( index > recStart ? index - recStart : 0, vib.level(),
+                                  REC_VIB_FLAG_TRIGGER | REC_VIB_FLAG_POLLED );
+        }
     }
     else if ( state == State::RECORDING && now - lastActivityUs >= (int64_t) TRIG_HOLD_MS * 1000 )
     {
