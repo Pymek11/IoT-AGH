@@ -48,6 +48,7 @@ Build settings (boards, serial speed, build flags) live in `platformio.ini`.
 | [microphone.md](microphone.md) | `Microphone` class: INMP441 wiring, I2S setup, sample format, DC offset removal |
 | [logger.md](logger.md) | `Logger` class: log format, levels, enabling / disabling, baud rate |
 | [platformio.md](platformio.md) | `platformio.ini`: environments, build flags, definitions, how to build and flash |
+| [lora-thingsboard.md](lora-thingsboard.md) | LoRa node -> LoPy gateway -> ThingsBoard dashboard: packet format, setup, testing |
 
 ## Source layout
 
