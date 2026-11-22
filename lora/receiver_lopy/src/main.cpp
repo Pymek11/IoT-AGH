@@ -78,6 +78,24 @@ static uint32_t lastStats = 0;
 static bool timeConfigured = false;
 static bool announced[256];   // sensors already announced to the gateway API since the last MQTT connect
 
+// The node sends every alarm twice (same sensor id, type and counter, ~250 ms apart); keep only the first
+constexpr uint32_t DUPLICATE_WINDOW_MS = 3000;
+static uint8_t lastType[256];
+static uint8_t lastCounter[256];
+static uint32_t lastSeenMs[256];
+static bool seenBefore[256];
+
+static bool isDuplicate( uint8_t id, uint8_t type, uint8_t counter )
+{
+    bool dup = seenBefore[id] && lastCounter[id] == counter && lastType[id] == type &&
+               millis() - lastSeenMs[id] < DUPLICATE_WINDOW_MS;
+    seenBefore[id] = true;
+    lastCounter[id] = counter;
+    lastType[id] = type;
+    lastSeenMs[id] = millis();
+    return dup;
+}
+
 static int64_t nowMs()
 {
     struct timeval tv;
@@ -246,6 +264,12 @@ static void handleRadio()
     if ( st != RADIOLIB_ERR_NONE || len < LORA_PACKET_LEN )
     {
         Serial.printf( "Packet rejected (code %d, length %u)\n", st, (unsigned) len );
+        return;
+    }
+
+    if ( isDuplicate( buf[0], buf[1], buf[2] ) )
+    {
+        Serial.printf( "LoRa: duplicate of sensor=%u #%u ignored\n", buf[0], buf[2] );
         return;
     }
 
