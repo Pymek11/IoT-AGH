@@ -41,7 +41,7 @@ constexpr const char *TOPIC_GW_CONNECT   = "v1/gateway/connect";
 constexpr const char *TOPIC_OWN_TELEMETRY = "v1/devices/me/telemetry";
 constexpr const char *DEVICE_PROFILE     = "Sensor";   // profile used for auto-created sensor devices
 
-constexpr uint32_t WIFI_RETRY_MS   = 30000;
+constexpr uint32_t WIFI_RETRY_MS   = 20000;    // an attempt that has not connected after this long is restarted
 constexpr uint32_t MQTT_RETRY_MS   = 5000;
 constexpr uint32_t STATS_PERIOD_MS = 60000;
 constexpr int64_t  MIN_VALID_EPOCH = 1700000000;       // anything below means SNTP has not synced yet
@@ -101,31 +101,38 @@ static void enqueue( const Packet &p )
     qCount++;
 }
 
+// Starts a (re)connection attempt and returns immediately, so LoRa packets are not missed while
+// Wi-Fi is down. The result is reported by trackWiFi().
 static void connectWiFi()
 {
     lastWifiTry = millis();
+    WiFi.disconnect( true );       // drop a half-open attempt, otherwise begin() fails with "sta is connecting"
+    delay( 100 );
     WiFi.mode( WIFI_STA );
+    WiFi.setSleep( false );        // modem sleep makes TCP connects to the server flaky
     WiFi.begin( WIFI_SSID, WIFI_PASS );
-    Serial.print( "Wi-Fi" );
-    uint32_t start = millis();
-    while ( WiFi.status() != WL_CONNECTED && millis() - start < 20000 )
+    Serial.println( "Wi-Fi: connecting..." );
+}
+
+// Logs Wi-Fi connect / disconnect transitions and does the one-time SNTP setup
+static void trackWiFi()
+{
+    static bool wasConnected = false;
+    bool connected = WiFi.status() == WL_CONNECTED;
+    if ( connected && !wasConnected )
     {
-        delay( 500 );
-        Serial.print( "." );
-    }
-    if ( WiFi.status() == WL_CONNECTED )
-    {
-        Serial.printf( " OK, IP: %s\n", WiFi.localIP().toString().c_str() );
+        Serial.printf( "Wi-Fi: connected, IP %s, RSSI %d dBm\n", WiFi.localIP().toString().c_str(), WiFi.RSSI() );
         if ( !timeConfigured )
         {
             configTime( 0, 0, "pool.ntp.org", "time.google.com" );   // for packet timestamps
             timeConfigured = true;
         }
     }
-    else
+    else if ( !connected && wasConnected )
     {
-        Serial.println( " not connected (check SSID/password, 2.4 GHz only) - radio keeps working" );
+        Serial.println( "Wi-Fi: connection lost (check signal, 2.4 GHz only) - radio keeps working" );
     }
+    wasConnected = connected;
 }
 
 // Non-blocking in practice: short socket timeout, retried every MQTT_RETRY_MS, radio keeps receiving
@@ -282,6 +289,7 @@ void setup()
 
 void loop()
 {
+    trackWiFi();
     if ( WiFi.status() != WL_CONNECTED && millis() - lastWifiTry > WIFI_RETRY_MS )
     {
         connectWiFi();

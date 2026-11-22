@@ -30,6 +30,18 @@ Both firmwares include the same header, so the parameters cannot drift apart.
 Event types: `0` test/heartbeat (no alarm), `1` / `2` single signal (WARNING alarm), `3` vibration and
 sound together (CRITICAL alarm). The receiver adds `rssi` and `snr` of the received packet.
 
+## What the node does (`lora/node_xiao/src/main.cpp`)
+
+- **Vibration:** an 801S sensor with a digital output on **D0 (GPIO1)**. It is LOW and silent at rest and
+  chatters (tens of HIGH/LOW changes per second) while shaken, so the node counts edges in 200 ms windows:
+  3 or more edges = vibration, sent as event type `1`. At most one vibration packet per 5 s.
+- **Heartbeat:** event type `0` at boot and every 60 s, so the dashboard shows the sensor as online.
+- **Sound:** the microphone detection is not connected to the LoRa node yet (types `2` and `3` are unused).
+- D1 (GPIO2) is the microphone data pin in `Source/config.h`, so keep the 801S on D0.
+
+`tools/vibration_801s_test` is a stand-alone monitor that prints every level change on D0 and D1; use it to
+check the sensor wiring or tune the module's sensitivity screw. It replaces the firmware on the board.
+
 ## What the receiver does (`lora/receiver_lopy/src/main.cpp`)
 
 1. Receives a packet (interrupt on DIO0), validates length and CRC.
@@ -103,7 +115,9 @@ the alarm (clear it in Alarm history when done).
 
 ## Status
 
-Verified: server reachable, MQTT broker rejects a bad token, device profile -> rule chain -> alarm ->
-attributes chain (tested with a temporary device through the REST API, deleted afterwards), dashboard renders.
-Not verified (no hardware or toolchain here): the firmware has not been compiled or flashed, and the LoRa link
-and gateway MQTT publish were not exercised end to end.
+Verified on hardware (XIAO node + LoPy receiver, about 1 m apart, RSSI about -90 dBm, SNR about 9 dB):
+801S vibration -> LoRa -> LoPy -> Wi-Fi/MQTT gateway API -> `sensor-4` telemetry (typ, licznik, rssi, snr),
+device Online, WARNING alarm "ATV detected" raised by the Sensor profile, gateway health telemetry every 60 s.
+
+Not done: the microphone is not part of the LoRa node, so `typ` 2 and 3 (and the CRITICAL alarm) are never
+sent yet. Range outside the lab has not been measured.
