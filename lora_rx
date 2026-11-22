@@ -1,0 +1,130 @@
+// LoPy 1.0 (Arduino) = ODBIORNIK LoRa P2P + przekaźnik Wi-Fi -> ThingsBoard (MQTT)
+// Nadajnik: XIAO ESP32S3 + Wio-SX1262 z programem lora_tx.ino
+//
+// Arduino IDE: Board "ESP32 Dev Module", port LoPy
+// Biblioteki: RadioLib, PubSubClient
+// Wgrywanie: kabelek G23 <-> GND, podłącz USB, Upload, zdejmij kabelek, reset
+
+#include <RadioLib.h>
+#include <SPI.h>
+#include <WiFi.h>
+#include <PubSubClient.h>
+
+// ================= KONFIGURACJA =================
+const char* WIFI_SSID = "NAZWA_SIECI";      // tylko 2,4 GHz
+const char* WIFI_PASS = "HASLO";
+const char* TB_HOST   = "79.76.56.250";     // serwer ThingsBoard
+const uint16_t TB_PORT = 1883;
+const char* TB_TOKEN  = "ACCESS_TOKEN";     // token urządzenia (np. "lopy-odbiornik") w ThingsBoard
+// =================================================
+
+// Piny radia SX1272 wewnątrz LoPy
+#define LORA_SCK   5
+#define LORA_MISO 19
+#define LORA_MOSI 27
+#define LORA_NSS  17
+#define LORA_RST  18
+#define LORA_DIO  23
+
+SPIClass loraSPI(VSPI);
+SX1272 radio = new Module(LORA_NSS, LORA_DIO, LORA_RST, RADIOLIB_NC, loraSPI);
+
+WiFiClient net;
+PubSubClient mqtt(net);
+
+volatile bool packetReceived = false;
+void IRAM_ATTR onReceive() { packetReceived = true; }
+
+unsigned long lastMqttTry = 0;
+unsigned long received = 0;
+
+void connectWiFi() {
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  Serial.print("Wi-Fi");
+  unsigned long start = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - start < 20000) {
+    delay(500);
+    Serial.print(".");
+  }
+  if (WiFi.status() == WL_CONNECTED)
+    Serial.printf(" OK, IP: %s\n", WiFi.localIP().toString().c_str());
+  else
+    Serial.println(" BRAK (sprawdz nazwe/haslo/2,4 GHz) - radio dziala dalej");
+}
+
+// Nieblokujące łączenie z ThingsBoard - radio odbiera nawet, gdy serwer nie odpowiada
+void ensureMqtt() {
+  if (mqtt.connected() || WiFi.status() != WL_CONNECTED) return;
+  if (millis() - lastMqttTry < 5000) return;
+  lastMqttTry = millis();
+  Serial.printf("ThingsBoard %s:%u ... ", TB_HOST, TB_PORT);
+  if (mqtt.connect("lopy-odbiornik", TB_TOKEN, nullptr))
+    Serial.println("OK");
+  else
+    Serial.printf("blad, state=%d (-2 = brak polaczenia, 4/5 = zly token)\n", mqtt.state());
+}
+
+void setup() {
+  Serial.begin(115200);
+  delay(1000);
+  Serial.println("\n=== LoPy: odbiornik LoRa -> Wi-Fi -> ThingsBoard ===");
+
+  loraSPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_NSS);
+  // Parametry jak w lora_tx.ino na XIAO: 868.1 MHz, BW125, SF7, CR4/5, sync 0x12
+  int st = radio.begin(868.1, 125.0, 7, 5, RADIOLIB_SX127X_SYNC_WORD, 14, 8);
+  if (st != RADIOLIB_ERR_NONE) {
+    Serial.printf("radio.begin() blad: %d (-2 = radio nie znalezione)\n", st);
+    while (true) delay(1000);
+  }
+  radio.setPacketReceivedAction(onReceive);
+  radio.startReceive();
+  Serial.println("Radio OK, nasluchuje na 868.1 MHz SF7");
+
+  // Opcjonalnie: wybór anteny Wi-Fi w LoPy (gdy Wi-Fi łączy się słabo).
+  // Odkomentuj; jeśli dalej słabo, zmień HIGH na LOW.
+  // pinMode(16, OUTPUT);
+  // digitalWrite(16, HIGH);
+
+  connectWiFi();
+  mqtt.setServer(TB_HOST, TB_PORT);
+}
+
+void loop() {
+  if (WiFi.status() != WL_CONNECTED) {
+    static unsigned long lastWifiTry = 0;
+    if (millis() - lastWifiTry > 30000) { lastWifiTry = millis(); connectWiFi(); }
+  }
+  ensureMqtt();
+  mqtt.loop();
+
+  if (!packetReceived) return;
+  packetReceived = false;
+
+  uint8_t buf[64];
+  size_t len = radio.getPacketLength();
+  if (len > sizeof(buf)) len = sizeof(buf);
+  int st = radio.readData(buf, len);
+  float rssi = radio.getRSSI();
+  float snr  = radio.getSNR();
+  radio.startReceive();   // od razu z powrotem nasłuch
+
+  if (st != RADIOLIB_ERR_NONE || len < 3) {
+    Serial.printf("Pakiet odrzucony (kod %d, dlugosc %u)\n", st, (unsigned)len);
+    return;
+  }
+
+  received++;
+  Serial.printf("LoRa: czujnik=%u typ=%u nr=%u | RSSI=%.1f dBm SNR=%.1f dB\n",
+                buf[0], buf[1], buf[2], rssi, snr);
+
+  char json[160];
+  snprintf(json, sizeof(json),
+           "{\"sensor_id\":%u,\"typ\":%u,\"licznik\":%u,\"rssi\":%.1f,\"snr\":%.1f,\"odebrane\":%lu}",
+           buf[0], buf[1], buf[2], rssi, snr, received);
+
+  if (mqtt.connected() && mqtt.publish("v1/devices/me/telemetry", json))
+    Serial.println("  -> wyslano do ThingsBoard");
+  else
+    Serial.println("  -> NIE wyslano (brak polaczenia z ThingsBoard)");
+}
